@@ -232,6 +232,19 @@ class OpenAIClient:
 
     def process_batch(self, prompts: List[str], **kwargs) -> List[dict]:
         return [self.__call__(prompt, **kwargs) for prompt in prompts]
+
+    def _usage_to_dict(self, usage):
+        if usage is None:
+            return {}
+        if hasattr(usage, "model_dump"):
+            return usage.model_dump()
+        if isinstance(usage, dict):
+            return usage
+        return {
+            key: getattr(usage, key)
+            for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+            if hasattr(usage, key)
+        }
         
     def _create_client(self,):
         from openai import OpenAI, AzureOpenAI
@@ -313,7 +326,10 @@ class OpenAIClient:
     
         request["msgs"] = msgs
         outputs = self._send_request(request)
-        response = {'text': [outputs.choices[0].message.content]}
+        response = {
+            'text': [outputs.choices[0].message.content],
+            'usage': self._usage_to_dict(getattr(outputs, "usage", None)),
+        }
         return response
 
     

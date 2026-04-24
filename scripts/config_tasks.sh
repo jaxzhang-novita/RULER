@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-NUM_SAMPLES=500
-REMOVE_NEWLINE_TAB=false
-STOP_WORDS=""
+NUM_SAMPLES="${NUM_SAMPLES:-500}"
+REMOVE_NEWLINE_TAB="${REMOVE_NEWLINE_TAB:-false}"
+STOP_WORDS="${STOP_WORDS:-}"
 
 if [ -z "${STOP_WORDS}" ]; then
     STOP_WORDS=""

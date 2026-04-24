@@ -16,6 +16,13 @@
 # container: docker.io/cphsieh/ruler:0.1.0
 # bash run.sh MODEL_NAME BENCHMARK_NAME
 
+ENV_FILE="${ENV_FILE:-../.env}"
+if [ -f "${ENV_FILE}" ]; then
+    set -a
+    source "${ENV_FILE}"
+    set +a
+fi
+
 if [ $# -ne 2 ]; then
     echo "Usage: $0 <model_name> $1 <benchmark_name>"
     exit 1
@@ -23,11 +30,11 @@ fi
 
 
 # Root Directories
-GPUS="1" # GPU size for tensor_parallel.
-ROOT_DIR="benchmark_root" # the path that stores generated task samples and model predictions.
-MODEL_DIR="../.." # the path that contains individual model folders from HUggingface.
-ENGINE_DIR="." # the path that contains individual engine folders from TensorRT-LLM.
-BATCH_SIZE=1  # increase to improve GPU utilization
+GPUS="${GPUS:-1}" # GPU size for tensor_parallel.
+ROOT_DIR="${ROOT_DIR:-benchmark_root}" # the path that stores generated task samples and model predictions.
+MODEL_DIR="${MODEL_DIR:-../..}" # the path that contains individual model folders from HUggingface.
+ENGINE_DIR="${ENGINE_DIR:-.}" # the path that contains individual engine folders from TensorRT-LLM.
+BATCH_SIZE="${BATCH_SIZE:-1}"  # increase to improve GPU utilization
 
 
 # Model and Tokenizer
@@ -56,6 +63,26 @@ if [ -z "${TASKS}" ]; then
     echo "Benchmark: ${BENCHMARK} is not supported"
     exit 1
 fi
+if [ -n "${RULER_TASKS:-}" ]; then
+    IFS="," read -r -a TASKS <<< "${RULER_TASKS}"
+fi
+if [ -n "${RULER_SEQ_LENGTHS:-}" ]; then
+    IFS="," read -r -a SEQ_LENGTHS <<< "${RULER_SEQ_LENGTHS}"
+fi
+INPUT_PRICE_PER_M="${INPUT_PRICE_PER_M:-12}"
+OUTPUT_PRICE_PER_M="${OUTPUT_PRICE_PER_M:-24}"
+COST_CURRENCY="${COST_CURRENCY:-CNY}"
+
+echo "RULER evaluation"
+echo "  model       : ${MODEL_NAME} (${MODEL_PATH})"
+echo "  framework   : ${MODEL_FRAMEWORK}"
+echo "  benchmark   : ${BENCHMARK}"
+echo "  tasks       : ${TASKS[*]}"
+echo "  lengths     : ${SEQ_LENGTHS[*]}"
+echo "  num_samples : ${NUM_SAMPLES}"
+echo "  pricing     : ${INPUT_PRICE_PER_M}/${OUTPUT_PRICE_PER_M} ${COST_CURRENCY} per 1M input/output tokens"
+echo "  output      : ${ROOT_DIR}/${MODEL_NAME}/${BENCHMARK}"
+echo
 
 
 # Start server (you may want to run in other container.)
@@ -86,15 +113,28 @@ fi
 
 # Start client (prepare data / call model API / obtain final metrics)
 total_time=0
-for MAX_SEQ_LENGTH in "${SEQ_LENGTHS[@]}"; do
+run_start_time=$(date +%s)
+total_lengths=${#SEQ_LENGTHS[@]}
+total_tasks=${#TASKS[@]}
+for length_idx in "${!SEQ_LENGTHS[@]}"; do
+    MAX_SEQ_LENGTH="${SEQ_LENGTHS[$length_idx]}"
+    length_start_time=$(date +%s)
     
     RESULTS_DIR="${ROOT_DIR}/${MODEL_NAME}/${BENCHMARK}/${MAX_SEQ_LENGTH}"
     DATA_DIR="${RESULTS_DIR}/data"
     PRED_DIR="${RESULTS_DIR}/pred"
     mkdir -p ${DATA_DIR}
     mkdir -p ${PRED_DIR}
-    
-    for TASK in "${TASKS[@]}"; do
+
+    echo "============================================================"
+    echo "Length $((length_idx + 1))/${total_lengths}: ${MAX_SEQ_LENGTH}"
+    echo "============================================================"
+
+    for task_idx in "${!TASKS[@]}"; do
+        TASK="${TASKS[$task_idx]}"
+        echo
+        echo "---- Task $((task_idx + 1))/${total_tasks}: ${TASK} @ ${MAX_SEQ_LENGTH} ----"
+        echo "[prepare] ${TASK}"
         python data/prepare.py \
             --save_dir ${DATA_DIR} \
             --benchmark ${BENCHMARK} \
@@ -106,6 +146,7 @@ for MAX_SEQ_LENGTH in "${SEQ_LENGTHS[@]}"; do
             --num_samples ${NUM_SAMPLES} \
             ${REMOVE_NEWLINE_TAB}
         
+        echo "[predict] ${TASK}"
         start_time=$(date +%s)
         python pred/call_api.py \
             --data_dir ${DATA_DIR} \
@@ -122,11 +163,39 @@ for MAX_SEQ_LENGTH in "${SEQ_LENGTHS[@]}"; do
         end_time=$(date +%s)
         time_diff=$((end_time - start_time))
         total_time=$((total_time + time_diff))
+        echo "[predict] ${TASK} completed in ${time_diff}s"
     done
-    
+
+    echo
+    echo "[evaluate] ${MAX_SEQ_LENGTH}"
     python eval/evaluate.py \
         --data_dir ${PRED_DIR} \
-        --benchmark ${BENCHMARK}
+        --benchmark ${BENCHMARK} \
+        ${RULER_TASKS:+--tasks ${RULER_TASKS}}
+
+    length_end_time=$(date +%s)
+    length_elapsed=$((length_end_time - length_start_time))
+    echo
+    echo "[cost/throughput] ${MAX_SEQ_LENGTH}"
+    python summarize_cost.py \
+        --pred_dir ${PRED_DIR} \
+        --input_price ${INPUT_PRICE_PER_M} \
+        --output_price ${OUTPUT_PRICE_PER_M} \
+        --currency ${COST_CURRENCY} \
+        --elapsed_seconds ${length_elapsed}
 done
 
+run_end_time=$(date +%s)
+run_elapsed=$((run_end_time - run_start_time))
 echo "Total time spent on call_api: $total_time seconds"
+echo "Total wall time: ${run_elapsed} seconds"
+
+echo
+echo "[cost/throughput] total"
+python summarize_cost.py \
+    --pred_dir "${ROOT_DIR}/${MODEL_NAME}/${BENCHMARK}" \
+    --recursive \
+    --input_price ${INPUT_PRICE_PER_M} \
+    --output_price ${OUTPUT_PRICE_PER_M} \
+    --currency ${COST_CURRENCY} \
+    --elapsed_seconds ${run_elapsed}

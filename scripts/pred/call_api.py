@@ -279,6 +279,8 @@ def main():
                 'truncation': truncation,
                 'length': length,
             }
+            if pred.get('usage'):
+                outputs_parallel[idx]['usage'] = pred['usage']
 
     threads = []
     outputs_parallel = [{} for _ in range(len(data))]
