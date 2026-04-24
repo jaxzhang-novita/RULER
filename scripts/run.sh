@@ -58,11 +58,11 @@ export AZURE_API_ENDPOINT=${AZURE_ENDPOINT}
 # Benchmark and Tasks
 source config_tasks.sh
 BENCHMARK=${2}
-declare -n TASKS=$BENCHMARK
-if [ -z "${TASKS}" ]; then
+if ! declare -p "${BENCHMARK}" >/dev/null 2>&1; then
     echo "Benchmark: ${BENCHMARK} is not supported"
     exit 1
 fi
+eval "TASKS=(\"\${${BENCHMARK}[@]}\")"
 if [ -n "${RULER_TASKS:-}" ]; then
     IFS="," read -r -a TASKS <<< "${RULER_TASKS}"
 fi
