@@ -182,7 +182,8 @@ for length_idx in "${!SEQ_LENGTHS[@]}"; do
         --input_price ${INPUT_PRICE_PER_M} \
         --output_price ${OUTPUT_PRICE_PER_M} \
         --currency ${COST_CURRENCY} \
-        --elapsed_seconds ${length_elapsed}
+        --elapsed_seconds ${length_elapsed} \
+        --label "${MAX_SEQ_LENGTH}"
 done
 
 run_end_time=$(date +%s)
@@ -198,4 +199,5 @@ python summarize_cost.py \
     --input_price ${INPUT_PRICE_PER_M} \
     --output_price ${OUTPUT_PRICE_PER_M} \
     --currency ${COST_CURRENCY} \
-    --elapsed_seconds ${run_elapsed}
+    --elapsed_seconds ${run_elapsed} \
+    --label "total"
