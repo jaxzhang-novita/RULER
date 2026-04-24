@@ -67,6 +67,17 @@ MODEL_SELECT() {
             AZURE_SECRET=""
             AZURE_ENDPOINT=""
             ;;
+        deepseek-v4-pro)
+            MODEL_PATH="deepseek-v4-pro"
+            MODEL_TEMPLATE_TYPE="base"
+            MODEL_FRAMEWORK="openai"
+            TOKENIZER_PATH="cl100k_base"
+            TOKENIZER_TYPE="openai"
+            OPENAI_API_KEY="${DEEPSEEK_API_KEY:-${OPENAI_API_KEY:-}}"
+            AZURE_ID=""
+            AZURE_SECRET=""
+            AZURE_ENDPOINT=""
+            ;;
         gemini_1.0_pro)
             MODEL_PATH="gemini-1.0-pro-latest"
             MODEL_TEMPLATE_TYPE="base"

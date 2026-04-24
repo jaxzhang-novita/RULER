@@ -209,6 +209,9 @@ class OpenAIClient:
             'gpt-4-32k': 32768,
             'gpt-4': 128000,
             'gpt-35-turbo-16k': 16384,
+
+            # DeepSeek
+            'deepseek-v4-pro': 1048576,
         }
         self.openai_api_key = os.environ["OPENAI_API_KEY"]
         self.azure_api_id = os.environ["AZURE_API_ID"]
@@ -226,15 +229,19 @@ class OpenAIClient:
         self.max_length = model2length[self.model_name]
         self.generation_kwargs = generation_kwargs
         self._create_client()
+
+    def process_batch(self, prompts: List[str], **kwargs) -> List[dict]:
+        return [self.__call__(prompt, **kwargs) for prompt in prompts]
         
     def _create_client(self,):
         from openai import OpenAI, AzureOpenAI
         
-        # OpenAI
+        # OpenAI-compatible providers
         if self.openai_api_key:
-            self.client = OpenAI(
-                api_key=self.openai_api_key
-            )
+            client_kwargs = {"api_key": self.openai_api_key}
+            if self.model_name.startswith("deepseek-"):
+                client_kwargs["base_url"] = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+            self.client = OpenAI(**client_kwargs)
 
         # Azure
         elif self.azure_api_id and self.azure_api_secret:
@@ -264,14 +271,21 @@ class OpenAIClient:
     @retry(wait=wait_random_exponential(min=15, max=60), stop=stop_after_attempt(3))
     def _send_request(self, request):
         try:
+            request_kwargs = {
+                "model": self.model_name,
+                "messages": request['msgs'],
+                "max_tokens": request['tokens_to_generate'],
+                "temperature": request['temperature'],
+                "top_p": request['top_p'],
+                "stop": request['stop'],
+            }
+            if self.model_name.startswith("deepseek-"):
+                request_kwargs["reasoning_effort"] = "high"
+                request_kwargs["extra_body"] = {"thinking": {"type": "enabled"}}
+            else:
+                request_kwargs["seed"] = request['random_seed']
             response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=request['msgs'],
-                max_tokens=request['tokens_to_generate'],
-                temperature=request['temperature'],
-                seed=request['random_seed'],
-                top_p=request['top_p'],
-                stop=request['stop'],
+                **request_kwargs,
             )
         except Exception as e:
             print(f"Error occurred while calling OpenAI: {e}")
@@ -413,4 +427,3 @@ class GeminiClient:
         import google.generativeai as genai
         genai.configure(api_key=os.environ["GEMINI_API_KEY"])
         return genai.GenerativeModel(self.model_name)
-

@@ -42,7 +42,12 @@ import time
 from tqdm import tqdm
 from pathlib import Path
 import traceback
-from nemo.collections.asr.parts.utils.manifest_utils import read_manifest
+try:
+    from nemo.collections.asr.parts.utils.manifest_utils import read_manifest
+except ImportError:
+    def read_manifest(path):
+        with open(path, "r", encoding="utf-8") as fin:
+            return [json.loads(line) for line in fin if line.strip()]
 
 SERVER_TYPES = (
     'trtllm',
@@ -243,12 +248,16 @@ def main():
     def get_output(idx_list, index_list, input_list, outputs_list, others_list, truncation_list, length_list):
         nonlocal llm
 
-        while True:
+        last_error = None
+        for _ in range(3):
             try:
                 pred_list = llm.process_batch(prompts=input_list)
                 break
             except Exception as e:
+                last_error = e
                 traceback.print_exc()
+        else:
+            raise last_error
 
         zipped_iter = zip(pred_list, idx_list, index_list, input_list,
                           outputs_list, others_list, truncation_list, length_list)

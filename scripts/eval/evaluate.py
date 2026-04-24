@@ -26,6 +26,7 @@ python evaluate.py \
 import re
 import os
 import argparse
+import json
 import nltk
 try:
     nltk.data.find('tokenizers/punkt')
@@ -38,12 +39,23 @@ import yaml
 from pathlib import Path
 from tqdm import tqdm
 from collections import defaultdict
-from nemo.collections.asr.parts.utils.manifest_utils import read_manifest, write_manifest
+try:
+    from nemo.collections.asr.parts.utils.manifest_utils import read_manifest, write_manifest
+except ImportError:
+    def read_manifest(path):
+        with open(path, "r", encoding="utf-8") as fin:
+            return [json.loads(line) for line in fin if line.strip()]
+
+    def write_manifest(output_path, target_manifest, ensure_ascii: bool = True):
+        with open(output_path, "w", encoding="utf-8") as fout:
+            for item in target_manifest:
+                fout.write(json.dumps(item, ensure_ascii=ensure_ascii) + "\n")
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--data_dir", type=str, required=True, help='path to the prediction jsonl files')
 parser.add_argument("--benchmark", type=str, default='synthetic', help='Options: [synthetic]')
 parser.add_argument("--verbose", type=int, default=0, help='how many lines you want to display.')
+parser.add_argument("--tasks", type=str, default='', help='comma-separated task names to evaluate')
 args = parser.parse_args()
 
 
@@ -180,6 +192,9 @@ def main():
 
         
     TASKS = tasks_customized
+    if args.tasks:
+        selected_tasks = set(filter(None, args.tasks.split(',')))
+        TASKS = {task: config for task, config in TASKS.items() if task in selected_tasks}
     for _, config in TASKS.items():
         config.update(tasks_base[config['task']])
 

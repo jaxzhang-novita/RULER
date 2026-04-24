@@ -1,5 +1,11 @@
 .ipynb_checkpoints/
 __pycache__/
+.env
+.venv/
+benchmark_root/
+scripts/benchmark_root/
+scripts/data/synthetic/json/squad.json
+scripts/data/synthetic/json/hotpotqa.json
 *.jsonl
 .vscode/
 *.out
