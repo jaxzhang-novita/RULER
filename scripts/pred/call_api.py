@@ -224,6 +224,10 @@ def main():
         
     config = tasks_customized.get(args.task)
     config.update(tasks_base[config['task']])
+    tokens_to_generate_min = int(os.environ.get("RULER_TOKENS_TO_GENERATE_MIN", "0"))
+    if tokens_to_generate_min > config['tokens_to_generate']:
+        print(f"Increase tokens_to_generate from {config['tokens_to_generate']} to {tokens_to_generate_min}")
+        config['tokens_to_generate'] = tokens_to_generate_min
 
     task_file = args.data_dir / args.task / f'{args.subset}.jsonl'
     
